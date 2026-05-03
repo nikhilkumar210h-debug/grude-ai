@@ -1,0 +1,9 @@
+# PyCharm settings
+.idea/
+.env
+__pycache__/
+*.pyc
+grude_notes.txt
+screenshot_*.png
+recording.avi
+*.mp3

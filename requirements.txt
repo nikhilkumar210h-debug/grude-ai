@@ -1,0 +1,7 @@
+pywin32
+speechrecognition
+opencv-python
+numpy
+pyautogui
+psutil
+requests
