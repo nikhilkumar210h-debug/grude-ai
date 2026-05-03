@@ -141,7 +141,7 @@ grude-ai/
 
 Watch Grude in action:
 
-🔗 Link — 
+🔗 Link — https://drive.google.com/file/d/1CE4-crxUAgMTrJZoYrzHeZE1ODS8EtYx/view?usp=sharing
 
 ---
 
