@@ -7,6 +7,7 @@
 
 # ── Standard Library Imports ──
 import os
+import re
 import time
 import glob
 import random
@@ -21,6 +22,7 @@ import pyautogui
 import requests
 import speech_recognition as sr
 import win32com.client
+import groq as groq_lib
 from dotenv import load_dotenv
 
 # ── Load Environment Variables (.env file) ──
@@ -31,17 +33,20 @@ load_dotenv()
 # ============================================================
 speaker = win32com.client.Dispatch("SAPI.SpVoice")
 voices = speaker.GetVoices()
-speaker.Voice = voices.Item(1)  # Index 1 = Microsoft Ravi - English (India)
-speaker.Rate = 0                # Speed: -10 (slow) to 10 (fast)
+speaker.Voice = voices.Item(1)  # Index 1 = Microsoft Ravi
+speaker.Rate = 0                # Speed: -10 to 10
 speaker.Volume = 100            # Volume: 0 to 100
 
 # ============================================================
 # CONSTANTS
 # ============================================================
 USER_NAME = "Nikhil"
-OLLAMA_URL = "http://localhost:11434/api/chat"  # Local Llama3 server
+OLLAMA_URL = "http://localhost:11434/api/chat"
 AI_MODEL = "llama3"
 MUSIC_FOLDER = r"E:\music"
+
+# ── AI Mode Tracker ──
+ai_mode = "cloud"
 
 
 # ============================================================
@@ -51,6 +56,17 @@ MUSIC_FOLDER = r"E:\music"
 def say(text):
     """Speak text using Microsoft Ravi voice"""
     print(f"Grude: {text}")
+    text = str(text)
+    text = text.replace("*","").replace("#","").replace("_","")
+    text = text.replace("`","").replace("|","").replace("~","")
+    text = text.replace("&", "and").replace("%", "percent")
+    text = re.sub(r'http\S+', '', text)
+    text = re.sub(r'\[.*?\]\(.*?\)', '', text)
+    text = re.sub(r'\n+', ' ', text).strip()
+    if len(text) > 400:
+        text = text[:400] + "."
+    if not text.strip():
+        return
     speaker.Speak(text)
 
 
@@ -76,15 +92,13 @@ def take_command():
 def tell_time():
     """Tell current time"""
     now = datetime.now()
-    time_str = now.strftime("%I:%M %p")
-    say(f"Current time is {time_str}")
+    say(f"Current time is {now.strftime('%I:%M %p')}")
 
 
 def tell_date():
     """Tell current date"""
     now = datetime.now()
-    date_str = now.strftime("%A, %d %B %Y")
-    say(f"Today is {date_str}")
+    say(f"Today is {now.strftime('%A, %d %B %Y')}")
 
 
 # ============================================================
@@ -146,16 +160,13 @@ def record_screen(duration=10):
     screen_size = pyautogui.size()
     fourcc = cv2.VideoWriter_fourcc(*"XVID")
     out = cv2.VideoWriter("recording.avi", fourcc, 20.0, screen_size)
-
     say("Recording started")
     start_time = time.time()
-
     while time.time() - start_time < duration:
         img = pyautogui.screenshot()
         frame = np.array(img)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         out.write(frame)
-
     out.release()
     say("Recording saved")
 
@@ -166,13 +177,10 @@ def record_screen(duration=10):
 
 def take_note(query):
     """Save a voice note to grude_notes.txt"""
-    # Remove trigger words to get actual note content
     note = query.replace("take note", "").replace("note down", "").replace("note", "").strip()
-
     if not note:
         say("What should I note down?")
         note = take_command()
-
     if note:
         with open("grude_notes.txt", "a") as f:
             f.write(f"{datetime.now().strftime('%d-%m-%Y %H:%M')} - {note}\n")
@@ -187,8 +195,7 @@ def open_last_note():
         with open("grude_notes.txt", "r") as f:
             lines = f.readlines()
         if lines:
-            last = lines[-1].strip()
-            say(f"Your last note is: {last}")
+            say(f"Your last note is: {lines[-1].strip()}")
         else:
             say("No notes found.")
     except FileNotFoundError:
@@ -203,26 +210,20 @@ def get_weather(city="dehri on sone"):
     """Fetch and speak current weather for given city"""
     API_KEY = os.getenv("WEATHER_API_KEY")
     url = f"http://api.weatherapi.com/v1/current.json?key={API_KEY}&q={city}"
-
     try:
         response = requests.get(url)
         data = response.json()
-
         temp = data["current"]["temp_c"]
         desc = data["current"]["condition"]["text"]
         feels = data["current"]["feelslike_c"]
-
         say(f"{USER_NAME}, the weather in {city} is {desc}.")
         say(f"Temperature is {temp} degrees, feels like {feels} degrees.")
-
-        # Temperature feeling logic
         if temp > 35:
             say("It is quite hot. Please take care and drink water.")
         elif temp < 15:
             say("It is cold outside. Stay warm.")
         else:
             say("The weather feels comfortable today.")
-
     except:
         say(f"Sorry {USER_NAME}, I could not fetch the weather.")
 
@@ -235,8 +236,7 @@ def play_music():
     """Play a random MP3 from the music folder"""
     songs = glob.glob(f"{MUSIC_FOLDER}\\*.mp3")
     if songs:
-        song = random.choice(songs)
-        os.startfile(song)
+        os.startfile(random.choice(songs))
         say("Playing music")
     else:
         say("No music files found")
@@ -249,8 +249,7 @@ def play_music():
 def google_search(query):
     """Search Google with the given query"""
     search_query = query.replace("search", "").replace("google", "").strip()
-    url = f"https://www.google.com/search?q={search_query}"
-    webbrowser.open(url)
+    webbrowser.open(f"https://www.google.com/search?q={search_query}")
     say(f"Searching for {search_query}")
 
 
@@ -264,32 +263,29 @@ sites = {
     "pycharm":   ["open pycharm",   "open python",      "open code writer"]
 }
 
-# Site URLs
 links = {
     "youtube":   "https://www.youtube.com/",
     "google":    "https://www.google.com/",
     "instagram": "https://www.instagram.com/",
     "wikipedia": "https://www.wikipedia.org/",
     "chatgpt":   "https://chat.openai.com/"
-
 }
 
 
 # ============================================================
-# APP LAUNCHER  (set your own path)
+# APP LAUNCHER
 # ============================================================
 
 def open_app(app_name):
     """Open a Windows application by name"""
     apps = {
-        # "brave":      r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-        # "notepad":    "notepad.exe",
-        # "calculator": "calc.exe",
-        # "wordpad":    r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE",
-        # "game":       r"D:\Horizon Zero Dawn\HorizonZeroDawn.exe",
-        # "pycharm": r"C:\Program Files\JetBrains\PyCharm Community Edition 2025.2.6\bin\pycharm64.exe"
+        "brave":      r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+        "notepad":    "notepad.exe",
+        "calculator": "calc.exe",
+        "wordpad":    r"C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE",
+        "game":       r"D:\Horizon Zero Dawn\HorizonZeroDawn.exe",
+        "pycharm":    r"C:\Program Files\JetBrains\PyCharm Community Edition 2025.2.6\bin\pycharm64.exe"
     }
-
     for name, path in apps.items():
         if name in app_name:
             try:
@@ -297,16 +293,15 @@ def open_app(app_name):
                 return f"Opened {name}"
             except:
                 return "App not found or path issue"
-
     return "App not recognized"
 
 
 # ============================================================
-# AI - OLLAMA LLAMA3
+# AI - SMART CLOUD + LOCAL FALLBACK
 # ============================================================
 
 def create_system_message():
-    """Create the AI system prompt that defines Grude's personality"""
+    """Create the AI system prompt"""
     return {
         "role": "system",
         "content": """
@@ -353,19 +348,84 @@ Otherwise: Respond normally like a smart human assistant.
     }
 
 
-def get_ai_reply(messages):
-    """Send messages to Llama3 and get AI response"""
+def check_groq_available():
+    """Check if Groq cloud API is available"""
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        print("❌ No Groq API key")
+        return False
+    try:
+        client = groq_lib.Groq(api_key=api_key)
+        client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": "hi"}],
+            max_tokens=5
+        )
+        print("✅ Groq test success!")
+        return True
+    except groq_lib.RateLimitError:
+        print("❌ Groq rate limit")
+        return False
+    except groq_lib.AuthenticationError:
+        print("❌ Wrong Groq API key")
+        return False
+    except Exception as e:
+        print(f"❌ Groq error: {e}")
+        return False
+
+
+def get_cloud_reply(messages):
+    """Get AI reply from Groq cloud"""
+    api_key = os.getenv("GROQ_API_KEY")
+    client = groq_lib.Groq(api_key=api_key)
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=messages,
+        max_tokens=200,
+        temperature=0.7
+    )
+    return response.choices[0].message.content
+
+
+def get_local_reply(messages):
+    """Get AI reply from local Ollama"""
     data = {
         "model": AI_MODEL,
         "messages": messages,
         "stream": False
     }
-    response = requests.post(OLLAMA_URL, json=data)
+    response = requests.post(OLLAMA_URL, json=data, timeout=30)
     return response.json()["message"]["content"]
 
 
+def get_ai_reply(messages):
+    """Smart AI — tries cloud first, falls back to local"""
+    global ai_mode
+
+    if ai_mode == "cloud":
+        try:
+            reply = get_cloud_reply(messages)
+            print("🌐 [Cloud AI - Groq]")
+            return reply
+        except groq_lib.RateLimitError:
+            print("⚠️ Cloud limit — switching to Local")
+            say("Switching to local AI.")
+            ai_mode = "local"
+        except Exception as e:
+            print(f"⚠️ Cloud error: {e}")
+            ai_mode = "local"
+
+    if ai_mode == "local":
+        try:
+            reply = get_local_reply(messages)
+            print("💻 [Local AI - Llama3]")
+            return reply
+        except Exception as e:
+            raise Exception(f"Both AI unavailable: {e}")
+
+
 def handle_ai_response(reply):
-    """Check if AI response contains an ACTION command and execute it"""
+    """Handle ACTION commands from AI"""
     if reply.startswith("ACTION:open_app:"):
         app = reply.split(":")[-1]
         result = open_app(app)
@@ -375,10 +435,41 @@ def handle_ai_response(reply):
 
 
 def trim_memory(messages):
-    """Keep only last 18 messages to avoid memory overflow"""
+    """Keep only last 18 messages"""
     if len(messages) > 20:
-        return messages[:1] + messages[-18:]  # Keep system message + last 18
+        return messages[:1] + messages[-18:]
     return messages
+
+
+def check_ai_on_startup():
+    """Check which AI is available on startup"""
+    global ai_mode
+
+    api_key = os.getenv("GROQ_API_KEY")
+    print(f"🔑 Groq Key: {api_key[:10] if api_key else 'NOT FOUND'}")
+
+    cloud_ok = check_groq_available()
+    local_ok = False
+
+    try:
+        requests.get("http://localhost:11434", timeout=2)
+        local_ok = True
+    except:
+        local_ok = False
+
+    print(f"☁️ Cloud OK: {cloud_ok} | 💻 Local OK: {local_ok}")
+
+    if cloud_ok:
+        ai_mode = "cloud"
+        print("🌐 Cloud AI ready (Groq)")
+        say("Cloud AI is ready.")
+    elif local_ok:
+        ai_mode = "local"
+        print("💻 Local AI ready (Ollama)")
+        say("Local AI is ready.")
+    else:
+        print("❌ No AI available!")
+        say("Warning. No AI is available. Please start Ollama or check internet.")
 
 
 # ============================================================
@@ -424,7 +515,7 @@ def chat():
         # ── Weather ──
         if "weather" in query or "mausam" in query:
             words = query.split()
-            city = "dehri on sone"  # Default city
+            city = "dehri on sone"
             if "in" in words:
                 idx = words.index("in")
                 if idx + 1 < len(words):
@@ -446,18 +537,18 @@ def chat():
             say("Muted")
             continue
 
-            # ── Notes (read first, then save) ──
+        # ── Notes ──
         if "open my note" in query or "open last note" in query or \
-                "read note" in query or "read my note" in query or \
-                "show note" in query or "my note" in query:
+           "read note" in query or "read my note" in query or \
+           "show note" in query or "my note" in query:
             open_last_note()
             continue
 
         if ("take note" in query or "note down" in query) or \
-                ("note" in query and "notepad" not in query and
-                 "open" not in query and "read" not in query and
-                 "last" not in query and "my" not in query and
-                 "show" not in query):
+           ("note" in query and "notepad" not in query and
+                "open" not in query and "read" not in query and
+                "last" not in query and "my" not in query and
+                "show" not in query):
             take_note(query)
             continue
 
@@ -465,13 +556,13 @@ def chat():
         if "restart pc" in query:
             say("Are you sure you want to restart?")
             confirm = take_command()
-            restart_pc() if "yes" in confirm else say("Restart cancelled.")
+            restart_pc() if "yes" in confirm or "restart" in confirm else say("Restart cancelled.")
             continue
 
         if "shutdown pc" in query or "shut down pc" in query:
             say("Are you sure you want to shutdown?")
             confirm = take_command()
-            shutdown_pc() if "yes" in confirm else say("Shutdown cancelled.")
+            shutdown_pc() if "yes" in confirm or "shutdown" in confirm else say("Shutdown cancelled.")
             continue
 
         if "sleep pc" in query:
@@ -495,38 +586,35 @@ def chat():
             os.startfile("calc.exe")
             say("Opening Calculator")
             continue
+
         # ── System Info ──
         if "battery" in query:
             tell_battery()
             continue
-        if "system" in query or "cpu" in query or "ram" in query:
+        if "system info" in query or "cpu usage" in query or "ram usage" in query:
             tell_system_info()
             continue
-
 
         # ── Google Search ──
         if "search" in query or "google search" in query:
             google_search(query)
             continue
 
-
         # ── Music ──
         if "play music" in query:
             play_music()
             continue
 
-        # ── AI Response (Llama3) ──
+        # ── AI Response ──
         messages.append({"role": "user", "content": query})
         try:
             reply = get_ai_reply(messages)
 
-            # Handle ACTION commands from AI
             if "ACTION:open_app" in reply:
                 if "open" in query:
                     if handle_ai_response(reply):
                         continue
                 else:
-                    # Strip ACTION part if query wasn't about opening an app
                     reply = reply.replace(reply[reply.find("ACTION"):], "").strip()
                     if not reply:
                         reply = "Sure, how can I help you?"
@@ -546,4 +634,5 @@ def chat():
 
 if __name__ == "__main__":
     say("Hello sir, I am Grude. How can I help you today?")
+    check_ai_on_startup()
     chat()
